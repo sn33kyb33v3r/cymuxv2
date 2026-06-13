@@ -1,18 +1,20 @@
 #!/bin/bash
 set -e
 
-# Core deployment directory verification
-APK_DIR="build/apk"
-mkdir -p "${APK_DIR}/res/values"
+ndk-build -C jni/
 
-cat << 'INNER_EOF' > "${APK_DIR}/res/values/strings.xml"
-<?xml version="1.0" encoding="utf-8"?>
-<resources>
-    <string name="app_name">CymuxV2</string>
-</resources>
-INNER_EOF
+mkdir -p build/out/lib/arm64-v8a
 
-# Assemble explicit target manifest
-cp AndroidManifest.xml "${APK_DIR}/"
+cp libs/arm64-v8a/libcymux.so build/out/lib/arm64-v8a/
 
-echo "APK packaging directories structured."
+python3 build/axml_encoder.py AndroidManifest.xml build/out/AndroidManifest.xml
+
+cd build/out
+zip -r ../../cymux_unaligned.apk AndroidManifest.xml lib/
+cd ../..
+
+zipalign -f -v 4 cymux_unaligned.apk cymux_aligned.apk
+apksigner sign --ks build/debug.keystore --ks-key-alias androiddebugkey --ks-pass pass:android --min-sdk-version 31 --out cymux_production.apk cymux_aligned.apk
+
+rm cymux_unaligned.apk cymux_aligned.apk
+echo "SUCCESS: cymux_production.apk generated."

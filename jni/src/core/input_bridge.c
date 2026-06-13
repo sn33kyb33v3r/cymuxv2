@@ -1,57 +1,49 @@
 #define _GNU_SOURCE
-#include "cymux_engine.h"
 #include <android/input.h>
 #include <android/keycodes.h>
-#include <android/log.h>
-#include <sched.h>
 #include <unistd.h>
+#include <pthread.h>
+#include "cymux_engine.h"
 
-#define LOG_TAG "CymuxInputBridge"
+void write_input_to_pty(CymuxRuntime *runtime, int keycode) {
+    char c = 0;
+    if (keycode >= AKEYCODE_A && keycode <= AKEYCODE_Z) {
+        c = 'a' + (keycode - AKEYCODE_A);
+    } else if (keycode >= AKEYCODE_0 && keycode <= AKEYCODE_9) {
+        c = '0' + (keycode - AKEYCODE_0);
+    } else if (keycode == AKEYCODE_ENTER) {
+        c = '\r';
+    } else if (keycode == AKEYCODE_SPACE) {
+        c = ' ';
+    }
+    if (c != 0 && runtime->pty_master > 0) {
+        write(runtime->pty_master, &c, 1);
+    }
+}
 
-void* input_poll_thread(void* arg) {
+void* input_poll_loop(void* arg) {
     CymuxRuntime* runtime = (CymuxRuntime*)arg;
-    
-    cpu_set_t cpuset;
-    CPU_ZERO(&cpuset);
-    CPU_SET(7, &cpuset);
-    sched_setaffinity(0, sizeof(cpu_set_t), &cpuset);
-
     while (runtime->running) {
-        AInputQueue* queue = NULL;
-        
         pthread_mutex_lock(&runtime->queue_mutex);
-        queue = runtime->queue;
-        pthread_mutex_unlock(&runtime->queue_mutex);
-
-        if (!queue) {
-            usleep(10000);
-            continue;
-        }
-
-        AInputEvent* event = NULL;
-        while (AInputQueue_getEvent(queue, &event) >= 0) {
-            if (AInputQueue_preDispatchEvent(queue, event) == 0) {
-                int32_t type = AInputEvent_getType(event);
-                if (type == AINPUT_EVENT_TYPE_KEY) {
-                    int32_t action = AKeyEvent_getAction(event);
-                    int32_t code = AKeyEvent_getKeyCode(event);
-                    
-                    if (action == AKEY_EVENT_ACTION_DOWN) {
-                        uint32_t head = atomic_load_explicit(&runtime->input_queue.head, memory_order_relaxed);
-                        uint32_t next_head = (head + 1) % RING_BUFFER_SIZE;
-                        uint32_t tail = atomic_load_explicit(&runtime->input_queue.tail, memory_order_acquire);
-                        
-                        if (next_head != tail) {
-                            runtime->input_queue.buffer[head] = (uint8_t)code;
-                            atomic_store_explicit(&runtime->input_queue.head, next_head, memory_order_release);
-                            
-                            write(runtime->pty_master, &runtime->input_queue.buffer[head], 1);
+        if (runtime->queue != NULL) {
+            AInputEvent* event = NULL;
+            while (AInputQueue_getEvent(runtime->queue, &event) >= 0) {
+                if (AInputQueue_preDispatchEvent(runtime->queue, event) == 0) {
+                    int32_t handled = 0;
+                    if (AInputEvent_getType(event) == AINPUT_EVENT_TYPE_KEY) {
+                        int32_t action = AKeyEvent_getAction(event);
+                        if (action == AKEY_EVENT_ACTION_DOWN) {
+                            int32_t keycode = AKeyEvent_getKeyCode(event);
+                            write_input_to_pty(runtime, keycode);
+                            handled = 1;
                         }
                     }
+                    AInputQueue_finishEvent(runtime->queue, event, handled);
                 }
-                AInputQueue_finishEvent(queue, event, 1);
             }
         }
+        pthread_mutex_unlock(&runtime->queue_mutex);
+        usleep(10000);
     }
     return NULL;
 }
