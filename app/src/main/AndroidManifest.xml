@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.cymux.terminal">
+
+    <uses-feature android:glEsVersion="0x00030000" android:required="true" />
+
+    <application android:label="CymuxV2" android:hasCode="true">
+        
+        <activity android:name=".PrimaryWorkspaceActivity"
+            android:label="Cymux Terminal"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:launchMode="singleTask"
+            android:resizeableActivity="true"
+            android:supportsPictureInPicture="false"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <activity android:name=".TacticalMirrorActivity"
+            android:label="Cymux FM"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:launchMode="singleTask"
+            android:process=":fm"
+            android:resizeableActivity="true"
+            android:exported="false" />
+
+    </application>
+</manifest>
