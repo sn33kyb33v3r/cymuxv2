@@ -1,0 +1,11 @@
+build/
+obj/
+libs/
+.cymux/
+android-ndk-r25c/
+android-ndk-r25c-linux.zip
+cymux_debug.keystore
+*.apk
+*.so
+*.idsig
+cymux_server
